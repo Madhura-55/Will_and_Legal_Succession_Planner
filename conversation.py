@@ -1,226 +1,166 @@
-{
-  "nbformat": 4,
-  "nbformat_minor": 0,
-  "metadata": {
-    "colab": {
-      "provenance": [],
-      "authorship_tag": "ABX9TyO4NMclxijAJCdD1jFiCWiG",
-      "include_colab_link": true
-    },
-    "kernelspec": {
-      "name": "python3",
-      "display_name": "Python 3"
-    },
-    "language_info": {
-      "name": "python"
-    }
-  },
-  "cells": [
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "view-in-github",
-        "colab_type": "text"
-      },
-      "source": [
-        "<a href=\"https://colab.research.google.com/github/Madhura-55/Will_and_Legal_Succession_Planner/blob/main/conversation.py\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "source": [],
-      "metadata": {
-        "id": "2s8rlGI0BP9m"
-      },
-      "execution_count": null,
-      "outputs": []
-    },
-    {
-      "cell_type": "code",
-      "source": [
-        "!pip install -q langchain langchain-anthropic python-dotenv pydantic"
-      ],
-      "metadata": {
-        "id": "KNJRIcpw2CKg"
-      },
-      "execution_count": null,
-      "outputs": []
-    },
-    {
-      "cell_type": "code",
-      "execution_count": null,
-      "metadata": {
-        "id": "ZqSPJkDC4v2X"
-      },
-      "outputs": [],
-      "source": [
-        "import os, json\n",
-        "from langchain_google_genai import ChatGoogleGenerativeAI\n",
-        "from langchain.schema import SystemMessage, HumanMessage, AIMessage\n",
-        "from will_schema import WillData, Asset, Beneficiary\n",
-        "\n",
-        "SYSTEM_PROMPT = \"\"\"You are Smart, a warm and helpful legal assistant guiding Indian families\n",
-        "to create a valid will under the Indian Succession Act 1925 and Hindu Succession Act 1956.\n",
-        "You are part of Smart-Will, an AI-powered will planning service.\n",
-        "\n",
-        "Rules you MUST follow:\n",
-        "- Ask EXACTLY ONE question per message. Never ask two questions at once.\n",
-        "- Use simple, friendly language. No legal jargon in questions.\n",
-        "- Adapt questions to family type:\n",
-        "    nuclear: ask about spouse and children\n",
-        "    huf: ask about Karta, coparceners, ancestral vs self-acquired property\n",
-        "    single_parent: ask about guardian for minor children\n",
-        "- After each section, briefly confirm what you understood before moving on.\n",
-        "- When ALL 7 stages are complete, end your final message with the exact token: COLLECTION_COMPLETE\n",
-        "\n",
-        "Stages (complete in order):\n",
-        "1. personal_details - name, age, address, religion\n",
-        "2. family_type - nuclear / huf / single_parent\n",
-        "3. assets - immovable property, bank accounts, investments, jewellery\n",
-        "4. beneficiaries - who gets what share\n",
-        "5. executor - who will carry out the will\n",
-        "6. witnesses - two adult names (cannot be beneficiaries)\n",
-        "7. special_wishes - guardian for minors, any residuary clause\n",
-        "\n",
-        "Current collected data:\n",
-        "{collected_data}\n",
-        "\n",
-        "Current stage: {current_stage}\n",
-        "\"\"\"\n",
-        "\n",
-        "STAGES = [\n",
-        "    \"personal_details\",\n",
-        "    \"family_type\",\n",
-        "    \"assets\",\n",
-        "    \"beneficiaries\",\n",
-        "    \"executor\",\n",
-        "    \"witnesses\",\n",
-        "    \"special_wishes\",\n",
-        "    \"complete\"\n",
-        "]\n",
-        "\n",
-        "class ConversationEngine:\n",
-        "    def __init__(self):\n",
-        "        self.llm = ChatGoogleGenerativeAI(\n",
-        "            model=\"gemini-1.5-flash\",\n",
-        "            google_api_key=os.environ[\"GEMINI_API_KEY\"],\n",
-        "            temperature=0.3,\n",
-        "            convert_system_message_to_human=True\n",
-        "        )\n",
-        "        self.history = []\n",
-        "        self.will_data = WillData()\n",
-        "        self.stage_index = 0\n",
-        "        self.is_complete = False\n",
-        "\n",
-        "    @property\n",
-        "    def current_stage(self):\n",
-        "        return STAGES[self.stage_index]\n",
-        "\n",
-        "    def get_will_data(self):\n",
-        "        return self.will_data\n",
-        "\n",
-        "    def _build_system(self):\n",
-        "        return SYSTEM_PROMPT.format(\n",
-        "            collected_data=self.will_data.model_dump_json(indent=2),\n",
-        "            current_stage=self.current_stage\n",
-        "        )\n",
-        "\n",
-        "    def chat(self, user_message: str) -> str:\n",
-        "        self.history.append(HumanMessage(content=user_message))\n",
-        "        messages = [SystemMessage(content=self._build_system())] + self.history\n",
-        "        response = self.llm.invoke(messages)\n",
-        "        reply = response.content.strip()\n",
-        "\n",
-        "        if \"COLLECTION_COMPLETE\" in reply:\n",
-        "            self.is_complete = True\n",
-        "            self.stage_index = len(STAGES) - 1\n",
-        "            reply = reply.replace(\"COLLECTION_COMPLETE\", \"\").strip()\n",
-        "\n",
-        "        self.history.append(AIMessage(content=reply))\n",
-        "        self._extract_data(user_message)\n",
-        "        self._advance_stage(reply)\n",
-        "        return reply\n",
-        "\n",
-        "    def _advance_stage(self, reply: str):\n",
-        "        stage_keywords = {\n",
-        "            \"personal_details\": [\"family\", \"married\", \"joint\", \"single\", \"nuclear\", \"hindu\"],\n",
-        "            \"family_type\":      [\"property\", \"asset\", \"flat\", \"account\", \"investment\", \"gold\"],\n",
-        "            \"assets\":           [\"beneficiar\", \"inherit\", \"who should\", \"leave to\", \"share\"],\n",
-        "            \"beneficiaries\":    [\"executor\", \"carry out\", \"responsible\"],\n",
-        "            \"executor\":         [\"witness\", \"two adult\"],\n",
-        "            \"witnesses\":        [\"guardian\", \"special wish\", \"anything else\", \"residuar\"],\n",
-        "        }\n",
-        "        check = reply.lower()\n",
-        "        current = self.current_stage\n",
-        "        if current in stage_keywords:\n",
-        "            if any(k in check for k in stage_keywords[current]):\n",
-        "                if self.stage_index < len(STAGES) - 2:\n",
-        "                    self.stage_index += 1\n",
-        "\n",
-        "    def _extract_data(self, user_msg: str):\n",
-        "        extract_prompt = f\"\"\"\n",
-        "From the user message below, extract any factual information and return ONLY a JSON object.\n",
-        "Use null for anything not mentioned. Do not include fields you are not sure about.\n",
-        "\n",
-        "User message: \"{user_msg}\"\n",
-        "\n",
-        "Return JSON with only these keys (all optional):\n",
-        "{{\n",
-        "  \"testator_name\": string or null,\n",
-        "  \"testator_age\": integer or null,\n",
-        "  \"testator_address\": string or null,\n",
-        "  \"religion\": string or null,\n",
-        "  \"family_type\": \"nuclear\" or \"huf\" or \"single_parent\" or null,\n",
-        "  \"new_asset\": {{ \"asset_type\": string, \"description\": string, \"identifier\": string or null, \"estimated_value\": number or null }} or null,\n",
-        "  \"new_beneficiary\": {{ \"name\": string, \"relationship\": string, \"age\": integer, \"allocation\": string, \"is_minor\": boolean }} or null,\n",
-        "  \"executor_name\": string or null,\n",
-        "  \"executor_relationship\": string or null,\n",
-        "  \"new_witness\": string or null,\n",
-        "  \"minor_guardian\": string or null,\n",
-        "  \"residuary_beneficiary\": string or null\n",
-        "}}\n",
-        "\n",
-        "Return ONLY the JSON. No markdown. No explanation.\n",
-        "\"\"\"\n",
-        "        try:\n",
-        "            res = self.llm.invoke([HumanMessage(content=extract_prompt)])\n",
-        "            raw = res.content.strip().lstrip(\"```json\").lstrip(\"```\").rstrip(\"```\").strip()\n",
-        "            data = json.loads(raw)\n",
-        "            self._merge(data)\n",
-        "        except Exception:\n",
-        "            pass\n",
-        "\n",
-        "    def _merge(self, data: dict):\n",
-        "        simple = [\n",
-        "            \"testator_name\", \"testator_age\", \"testator_address\", \"religion\",\n",
-        "            \"family_type\", \"executor_name\", \"executor_relationship\",\n",
-        "            \"minor_guardian\", \"residuary_beneficiary\"\n",
-        "        ]\n",
-        "        for f in simple:\n",
-        "            if data.get(f) is not None:\n",
-        "                setattr(self.will_data, f, data[f])\n",
-        "\n",
-        "        if data.get(\"new_asset\"):\n",
-        "            try:\n",
-        "                a = Asset(**data[\"new_asset\"])\n",
-        "                if a.description not in [x.description for x in self.will_data.assets]:\n",
-        "                    self.will_data.assets.append(a)\n",
-        "            except Exception:\n",
-        "                pass\n",
-        "\n",
-        "        if data.get(\"new_beneficiary\"):\n",
-        "            try:\n",
-        "                b = Beneficiary(**data[\"new_beneficiary\"])\n",
-        "                if b.name not in [x.name for x in self.will_data.beneficiaries]:\n",
-        "                    self.will_data.beneficiaries.append(b)\n",
-        "            except Exception:\n",
-        "                pass\n",
-        "\n",
-        "        if data.get(\"new_witness\"):\n",
-        "            w = data[\"new_witness\"]\n",
-        "            if w and w not in self.will_data.witnesses:\n",
-        "                self.will_data.witnesses.append(w)"
-      ]
-    }
-  ]
-}
+import os, json
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from will_schema import WillData, Asset, Beneficiary
+
+SYSTEM_PROMPT = """You are Smart, a warm and helpful legal assistant guiding Indian families
+to create a valid will under the Indian Succession Act 1925 and Hindu Succession Act 1956.
+You are part of Smart-Will, an AI-powered will planning service.
+
+Rules you MUST follow:
+- Ask EXACTLY ONE question per message. Never ask two questions at once.
+- Use simple, friendly language. No legal jargon in questions.
+- Adapt questions to family type:
+    nuclear: ask about spouse and children
+    huf: ask about Karta, coparceners, ancestral vs self-acquired property
+    single_parent: ask about guardian for minor children
+- After each section, briefly confirm what you understood before moving on.
+- When ALL 7 stages are complete, end your final message with the exact token: COLLECTION_COMPLETE
+
+Stages (complete in order):
+1. personal_details - name, age, address, religion
+2. family_type - nuclear / huf / single_parent
+3. assets - immovable property, bank accounts, investments, jewellery
+4. beneficiaries - who gets what share
+5. executor - who will carry out the will
+6. witnesses - two adult names (cannot be beneficiaries)
+7. special_wishes - guardian for minors, any residuary clause
+
+Current collected data:
+{collected_data}
+
+Current stage: {current_stage}
+"""
+
+STAGES = [
+    "personal_details",
+    "family_type",
+    "assets",
+    "beneficiaries",
+    "executor",
+    "witnesses",
+    "special_wishes",
+    "complete"
+]
+
+class ConversationEngine:
+    def __init__(self):
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            google_api_key=os.environ["GEMINI_API_KEY"],
+            temperature=0.3,
+            convert_system_message_to_human=True
+        )
+        self.history = []
+        self.will_data = WillData()
+        self.stage_index = 0
+        self.is_complete = False
+
+    @property
+    def current_stage(self):
+        return STAGES[self.stage_index]
+
+    def get_will_data(self):
+        return self.will_data
+
+    def _build_system(self):
+        return SYSTEM_PROMPT.format(
+            collected_data=self.will_data.model_dump_json(indent=2),
+            current_stage=self.current_stage
+        )
+
+    def chat(self, user_message: str) -> str:
+        self.history.append(HumanMessage(content=user_message))
+        messages = [SystemMessage(content=self._build_system())] + self.history
+        response = self.llm.invoke(messages)
+        reply = response.content.strip()
+
+        if "COLLECTION_COMPLETE" in reply:
+            self.is_complete = True
+            self.stage_index = len(STAGES) - 1
+            reply = reply.replace("COLLECTION_COMPLETE", "").strip()
+
+        self.history.append(AIMessage(content=reply))
+        self._extract_data(user_message)
+        self._advance_stage(reply)
+        return reply
+
+    def _advance_stage(self, reply: str):
+        stage_keywords = {
+            "personal_details": ["family", "married", "joint", "single", "nuclear", "hindu"],
+            "family_type":      ["property", "asset", "flat", "account", "investment", "gold"],
+            "assets":           ["beneficiar", "inherit", "who should", "leave to", "share"],
+            "beneficiaries":    ["executor", "carry out", "responsible"],
+            "executor":         ["witness", "two adult"],
+            "witnesses":        ["guardian", "special wish", "anything else", "residuar"],
+        }
+        check = reply.lower()
+        current = self.current_stage
+        if current in stage_keywords:
+            if any(k in check for k in stage_keywords[current]):
+                if self.stage_index < len(STAGES) - 2:
+                    self.stage_index += 1
+
+    def _extract_data(self, user_msg: str):
+        extract_prompt = f"""
+From the user message below, extract any factual information and return ONLY a JSON object.
+Use null for anything not mentioned. Do not include fields you are not sure about.
+
+User message: "{user_msg}"
+
+Return JSON with only these keys (all optional):
+{{
+  "testator_name": string or null,
+  "testator_age": integer or null,
+  "testator_address": string or null,
+  "religion": string or null,
+  "family_type": "nuclear" or "huf" or "single_parent" or null,
+  "new_asset": {{ "asset_type": string, "description": string, "identifier": string or null, "estimated_value": number or null }} or null,
+  "new_beneficiary": {{ "name": string, "relationship": string, "age": integer, "allocation": string, "is_minor": boolean }} or null,
+  "executor_name": string or null,
+  "executor_relationship": string or null,
+  "new_witness": string or null,
+  "minor_guardian": string or null,
+  "residuary_beneficiary": string or null
+}}
+
+Return ONLY the JSON. No markdown. No explanation.
+"""
+        try:
+            res = self.llm.invoke([HumanMessage(content=extract_prompt)])
+            raw = res.content.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            data = json.loads(raw)
+            self._merge(data)
+        except Exception:
+            pass
+
+    def _merge(self, data: dict):
+        simple = [
+            "testator_name", "testator_age", "testator_address", "religion",
+            "family_type", "executor_name", "executor_relationship",
+            "minor_guardian", "residuary_beneficiary"
+        ]
+        for f in simple:
+            if data.get(f) is not None:
+                setattr(self.will_data, f, data[f])
+
+        if data.get("new_asset"):
+            try:
+                a = Asset(**data["new_asset"])
+                if a.description not in [x.description for x in self.will_data.assets]:
+                    self.will_data.assets.append(a)
+            except Exception:
+                pass
+
+        if data.get("new_beneficiary"):
+            try:
+                b = Beneficiary(**data["new_beneficiary"])
+                if b.name not in [x.name for x in self.will_data.beneficiaries]:
+                    self.will_data.beneficiaries.append(b)
+            except Exception:
+                pass
+
+        if data.get("new_witness"):
+            w = data["new_witness"]
+            if w and w not in self.will_data.witnesses:
+                self.will_data.witnesses.append(w)
