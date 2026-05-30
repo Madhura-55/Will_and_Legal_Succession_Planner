@@ -1,6 +1,6 @@
 import os, json
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from will_schema import WillData, Asset, Beneficiary
 
 SYSTEM_PROMPT = """You are Smart, a warm and helpful legal assistant guiding Indian families
