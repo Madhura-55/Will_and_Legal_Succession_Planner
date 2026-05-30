@@ -4,7 +4,7 @@
   "metadata": {
     "colab": {
       "provenance": [],
-      "authorship_tag": "ABX9TyPhQ4uL+v8ZuzmrqV/8UIbM",
+      "authorship_tag": "ABX9TyO/9cH1F1jzj0bnlCnc7hQH",
       "include_colab_link": true
     },
     "kernelspec": {
@@ -23,7 +23,7 @@
         "colab_type": "text"
       },
       "source": [
-        "<a href=\"https://colab.research.google.com/github/Madhura-55/Will_and_Legal_Succession_Planner/blob/main/will_schema.ipynb\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+        "<a href=\"https://colab.research.google.com/github/Madhura-55/Will_and_Legal_Succession_Planner/blob/main/will_schema.py\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
       ]
     },
     {
@@ -32,28 +32,14 @@
         "!pip install -q langchain langchain-anthropic python-dotenv pydantic"
       ],
       "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "KNJRIcpw2CKg",
-        "outputId": "3860c226-cce6-4e19-fb50-516dcf78cd81"
+        "id": "KNJRIcpw2CKg"
       },
-      "execution_count": 1,
-      "outputs": [
-        {
-          "output_type": "stream",
-          "name": "stdout",
-          "text": [
-            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m51.3/51.3 kB\u001b[0m \u001b[31m1.8 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
-            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m837.5/837.5 kB\u001b[0m \u001b[31m17.2 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
-            "\u001b[?25h"
-          ]
-        }
-      ]
+      "execution_count": null,
+      "outputs": []
     },
     {
       "cell_type": "code",
-      "execution_count": 2,
+      "execution_count": 5,
       "metadata": {
         "id": "xiLHoam0uyP_"
       },
@@ -63,24 +49,24 @@
         "from typing import Optional, List\n",
         "\n",
         "class Asset(BaseModel):\n",
-        "    asset_type: str          # \"immovable\" | \"movable\" | \"business\"\n",
+        "    asset_type: str\n",
         "    description: str\n",
-        "    identifier: Optional[str] = None   # survey no, account no\n",
+        "    identifier: Optional[str] = None\n",
         "    estimated_value: Optional[float] = None\n",
         "\n",
         "class Beneficiary(BaseModel):\n",
         "    name: str\n",
         "    relationship: str\n",
         "    age: int\n",
-        "    allocation: str          # \"50%\" or \"Flat 3B, Adyar\"\n",
+        "    allocation: str\n",
         "    is_minor: bool = False\n",
         "\n",
         "class WillData(BaseModel):\n",
         "    testator_name: Optional[str] = None\n",
         "    testator_age: Optional[int] = None\n",
         "    testator_address: Optional[str] = None\n",
-        "    religion: Optional[str] = None      # determines ISA vs HSA\n",
-        "    family_type: Optional[str] = None   # \"nuclear\" | \"huf\" | \"single_parent\"\n",
+        "    religion: Optional[str] = None\n",
+        "    family_type: Optional[str] = None\n",
         "    assets: List[Asset] = []\n",
         "    beneficiaries: List[Beneficiary] = []\n",
         "    executor_name: Optional[str] = None\n",
