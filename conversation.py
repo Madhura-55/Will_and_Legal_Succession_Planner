@@ -46,7 +46,7 @@ STAGES = [
 class ConversationEngine:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             google_api_key=os.environ["GEMINI_API_KEY"],
             temperature=0.3,
             convert_system_message_to_human=True
